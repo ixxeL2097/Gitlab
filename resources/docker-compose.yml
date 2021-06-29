@@ -1,0 +1,99 @@
+version: '3'
+services:
+  gitlab:
+    image: '${LOCAL_IMAGE}'
+    restart: always
+    container_name: gitlab
+    hostname: '${HOSTNAME}'
+    environment:
+      GITLAB_OMNIBUS_CONFIG: |
+        external_url '${EXT_URL}:2443'
+        gitlab_rails['time_zone'] = 'Europe/Paris'
+        gitlab_rails['gitlab_shell_ssh_port'] = ${HOST_SSH_PORT}
+        gitlab_rails['license_file'] = '${LICENSE_PATH}'
+        letsencrypt['enable'] = false                                                                # GitLab 10.5 and 10.6 require this option
+
+        ## CERTIFICATE
+        nginx['ssl_certificate'] = "/etc/gitlab/ssl/${COMMON_NAME}.crt"
+        nginx['ssl_certificate_key'] = "/etc/gitlab/ssl/${COMMON_NAME}.key"
+        gitlab_rails['env'] = {"SSL_CERT_FILE" => "/etc/gitlab/trusted-certs/server.crt"}
+        
+        ## PROXY
+        # gitaly['env'] = {"http_proxy"=>"${HTTP_PROXY}", "https_proxy"=>"${HTTP_PROXY}", "no_proxy"=>"${NO_PROXY}"}
+        
+        ## LDAP
+        gitlab_rails['ldap_enabled'] = true
+        gitlab_rails['prevent_ldap_sign_in'] = false
+        gitlab_rails['ldap_servers'] = YAML.load <<-EOS
+          main:
+            label: 'PRODIBM-WCORP-CARREFOUR-LDAP'
+            host: '${LDAP_HOSTNAME}'
+            port: 636                                                                                # 389 or 636
+            uid: 'sAMAccountName'
+            encryption: 'simple_tls'                                                                 # "start_tls" or "simple_tls" or "plain"
+            verify_certificates: false
+            bind_dn: '${LDAP_BIND_DN}'
+            password: '${LDAP_BIND_PASSWD}'
+            active_directory: true
+            allow_username_or_email_login: true
+            base: '${LDAP_BASE_OU}'
+            group_base: '${LDAP_BASE_GROUP}'
+            admin_group: '${LDAP_BASE_ADMIN}'
+        EOS
+
+        ## NGINX
+        nginx['listen_addresses'] = ["0.0.0.0", "[::]"]                                              # Ecoute sur toutes les adresses IPv4/IPv6
+        nginx['redirect_http_to_https'] = true
+
+        ## POSTGRESQL BDD
+        postgresql['enable'] = true
+        postgresql['listen_address'] = nil
+        postgresql['port'] = 5432
+        #postgresql['md5_auth_cidr_addresses'] = %w(127.0.0.1/24, 192.168.0.1/24)
+        #postgresql['trust_auth_cidr_addresses'] = %w(127.0.0.1/24)
+        postgresql['sql_user'] = "gitlab"
+        postgresql['sql_user_password'] = Digest::MD5.hexdigest "${SQL_PASSWD}" << postgresql['sql_user']
+        #gitlab_rails['db_host'] = '127.0.0.1'                                                      # leave it if DBG is a postgresql standalone gitlab omnibus
+        gitlab_rails['db_port'] = 5432
+        gitlab_rails['db_username'] = "gitlab"
+        gitlab_rails['db_password'] = "${SQL_PASSWD}"
+
+        ## LOGS
+        logging['svlogd_size'] = 200 * 1024 * 1024                                                   # rotate after 200 MB of log data
+        logging['svlogd_num'] = 30                                                                   # keep 30 rotated log files
+        logging['svlogd_timeout'] = 24 * 60 * 60                                                     # rotate after 24 hours
+        logging['svlogd_filter'] = "gzip"                                                            # compress logs with gzip
+        logging['svlogd_udp'] = nil                                                                  # transmit log messages via UDP
+        logging['svlogd_prefix'] = nil                                                               # custom prefix for log messages
+
+        nginx['svlogd_prefix'] = "nginx"                                                             # override the log prefix for e.g. Nginx
+        unicorn['svlogd_prefix'] = "unicorn"
+        grafana['svlogd_prefix'] = "grafana"
+        postgresql['svlogd_prefix'] = "postgresql"
+        prometheus['svlogd_prefix'] = "prometheus"
+
+        ## GRAFANA
+        grafana['disable_login_form'] = false
+        grafana['admin_password'] = '${GRAFANA_PASSWD}'
+    ports:
+      - '${HOST_HTTP_PORT}:80'
+      - '2443:2443'
+      - '${HOST_SSH_PORT}:22'
+    volumes:
+      - config:/etc/gitlab
+      - logs:/var/log/gitlab
+      - data:/var/opt/gitlab
+      - server-crt:/etc/gitlab/trusted-certs/server.crt
+      - server-crt:/etc/gitlab/ssl/${COMMON_NAME}.crt
+      - server-key:/etc/gitlab/ssl/${COMMON_NAME}.key
+    networks:
+      - gitlab
+
+networks:
+  gitlab: {}
+volumes:
+  config: '${MOUNT_PATH}/config'
+  logs: '${MOUNT_PATH}/logs'
+  data: '${MOUNT_PATH}/data'
+  server-crt: '${RSC_PATH}/gitlab-certificates/server.crt'
+  server-key: '${RSC_PATH}/gitlab-certificates/server.key'
