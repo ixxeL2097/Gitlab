@@ -20,3 +20,5 @@
 ### 9. [Backup](documentation/09-Backup.md)
 
 ### 10. [Pull mirroring](./documentation/10-Pull-mirroring.md)
+
+### 11. [Gitlab runner](./documentation/11-Gitlab-runner.md)
