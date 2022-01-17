@@ -136,7 +136,7 @@ services:
 ```
 
 You don't need any `config.toml` file, and you will get errors when displaying container logs :
-```
+```console
 [root@workstation ~ ]$ sudo docker logs gitlab-runner                                                                                                             
 Runtime platform                                    arch=amd64 os=linux pid=7 revision=5316d4ac version=14.6.0
 Starting multi-runner from /etc/gitlab-runner/config.toml...  builds=0
@@ -163,14 +163,14 @@ IMG="alpine:latest"
 TAG="bastion"
 
 docker exec -it ${CONTAINER_NAME} gitlab-runner register --url ${URL} \
-	                                                       -r ${TOKEN} \
-		                                                     --name ${NAME} \
-				                                                 --executor ${EXECUTOR} \
-				                                                 --docker-image ${IMG} \
-				                                                 --tag-list ${TAG} \
-				                                                 --docker-volumes "/var/run/docker.sock:/var/run/docker.sock" \
-					                                               --docker-privileged \
-					                                               --non-interactive
+	                                                 -r ${TOKEN} \
+		                                         --name ${NAME} \
+				                         --executor ${EXECUTOR} \
+				                         --docker-image ${IMG} \
+				                         --tag-list ${TAG} \
+				                         --docker-volumes "/var/run/docker.sock:/var/run/docker.sock" \
+					                 --docker-privileged \
+					                 --non-interactive
 ```
 
 
