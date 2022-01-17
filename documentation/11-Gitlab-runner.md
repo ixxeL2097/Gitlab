@@ -74,3 +74,46 @@ If you run into a `x509 certificate unknow authority` error with your gitlab run
 ```
 
 Then reinstall the gitlab runner instance and everything should be working properly this time.
+
+### OpenShift using helm (Airgap)
+
+With OpenShift, you will most certainly encounter errors regarding the uid of user executed to run the pod as usual. You can just run the following command :
+```
+oc adm policy add-scc-to-group anyuid system:serviceaccounts:gitlab-runner
+```
+If you use the `default` serviceAccount to execute your jobs, you may need to grant permissions :
+```
+kubectl create clusterrolebinding gitlab-runner --clusterrole=cluster-admin --serviceaccount=gitlab-runner:default
+```
+
+It's very important to specify information about the runner under the section `runners.config` such as following :
+
+```yaml
+runners:
+  config: |
+    [[runners]]
+      [runners.kubernetes]
+  config: |
+    [[runners]]
+      [runners.kubernetes]
+        helper_image = "custom-registry.apps.ocpdata.mpl.michelin.com/gitlab-runner/gitlab-runner-helper:x86_64-5316d4ac"
+        #tls_verify = false
+        pull_policy = ["always"]
+        image_pull_secrets = ["custom-registry"]
+        privileged = true
+        namespace = "{{.Release.Namespace}}"
+        image = "ubuntu:16.04"
+```
+`helper_image` specifies a custom URL for the private registry to fetch the helper image
+`image_pull_secrets` aim at providing the docker secret credentials for the private registry.
+
+You will have to register the certificate of your private registry in the trusted root certificate of your cluster : 
+```
+oc create cm trusted-registries -n openshift-config --from-file=registry.example..5000=/home/user/docs/cert.pem
+oc patch image.config.openshift.io/cluster --patch '{"spec":{"additionalTrustedCA":{"name":"trusted-registries"}}}' --type=merge
+```
+
+If for any reason, you need to remove some runners from the GUI : 
+```
+curl -sS --header "PRIVATE-TOKEN:token" "https://gitlab.michelin.com/api/v4/runners/" | jq '.[] | select(.status == "not_connected") | .id' | xargs -I runner_id curl -S --request DELETE --header "PRIVATE-TOKEN:token" "https://gitlab.michelin.com/api/v4/runners/runner_id"
+```
